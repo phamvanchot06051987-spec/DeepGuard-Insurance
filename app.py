@@ -93,154 +93,163 @@ class UltimateInsuranceSystem:
         return self.llm.invoke(prompt).content
 
 # ==========================================
-# 2. 完整 UI 界面 (白标化 + B端展业功能)
+# 2. UI 界面：白标化样式 + 档案管理逻辑
 # ==========================================
 def main():
     st.set_page_config(page_title="智能保单管家", layout="centered", page_icon="🛡️", initial_sidebar_state="collapsed")
     
-    # 🔴 核心：商业级“掩耳盗铃” CSS，彻底隐藏所有 Streamlit 和 GitHub 标志
+    # 🔴 白标化 CSS：隐藏所有官方标志
     st.markdown("""
         <style>
-        /* 隐藏顶部红线和页眉 */
         [data-testid="stHeader"] {display: none;}
-        .block-container {padding-top: 1rem; padding-bottom: 1rem;}
-        
-        /* 隐藏右上角菜单和 Deploy 按钮 */
+        .block-container {padding-top: 1rem;}
         #MainMenu {visibility: hidden;}
         .stDeployButton {display: none;}
-        
-        /* 隐藏底部 Made with Streamlit */
         footer {visibility: hidden;}
-        
-        /* 隐藏右下角 GitHub 链接 (核心白标化) */
         .viewerBadge_container__1QSob {display: none !important;}
         [data-testid="stStatusWidget"] {display: none !important;}
-        
-        /* 美化看板指标卡片 */
-        [data-testid="stMetricValue"] {font-size: 1.8rem; color: #1E88E5;}
+        .stMetric { background-color: #ffffff; padding: 20px; border-radius: 12px; border: 1px solid #f0f2f6; box-shadow: 0 4px 6px rgba(0,0,0,0.03); }
+        div[data-testid="stMetricValue"] { color: #1e88e5; font-weight: bold; }
         </style>
     """, unsafe_allow_html=True)
 
-    st.title("🛡️ 智能家庭保险中台")
-    
-    if 'api_key' not in st.session_state:
-        st.session_state.api_key = ""
+    # 初始化状态
+    if 'api_key' not in st.session_state: st.session_state.api_key = ""
+    if 'current_family' not in st.session_state: st.session_state.current_family = "未命名档案"
         
     ds_key = st.session_state.api_key
     sys = UltimateInsuranceSystem(ds_key)
+
+    # --- 顶层客户档案管理 ---
+    st.markdown("### 🗃️ 客户档案管理中台")
+    all_families = sys.get_all_families()
     
+    col_f1, col_f2 = st.columns([2, 1])
+    
+    # 档案切换逻辑
+    if not all_families:
+        selected_family = col_f1.selectbox("当前选中的客户：", ["暂无客户档案，请先创建"])
+    else:
+        if st.session_state.current_family not in all_families:
+            st.session_state.current_family = all_families[0]
+        selected_family = col_f1.selectbox("选择或切换客户档案：", all_families, index=all_families.index(st.session_state.current_family))
+        st.session_state.current_family = selected_family
+
+    # 新增档案逻辑
+    new_family_input = col_f2.text_input("➕ 新增客户档案", placeholder="如：张三家庭")
+    if col_f2.button("创建新档案", use_container_width=True):
+        if new_family_input:
+            if new_family_input not in all_families:
+                st.session_state.current_family = new_family_input
+                st.success(f"档案【{new_family_input}】创建成功！")
+                st.rerun()
+            else:
+                st.error("该档案名称已存在")
+
+    st.divider()
+
     if not ds_key:
-        st.warning("👈 代理人请先前往【⚙️ 设置】配置您的 API Key。")
+        st.warning("⚠️ 欢迎使用！请先前往【⚙️ 设置】填入 API Key 激活核心 AI 引擎。")
 
-    t1, t2, t3, t4, t5 = st.tabs(["📸 拍照解析", "👨‍👩‍👧‍👦 家族看板", "🚗 车险理赔", "💬 条款顾问", "⚙️ 设置"])
+    t1, t2, t3, t4, t5 = st.tabs(["📸 保单导入", "👨‍👩‍👧‍👦 档案看板", "🚗 车险理赔", "💬 条款顾问", "⚙️ 设置"])
 
-    # ---------------- 模块1：拍照与解析 ----------------
+    # --- 1. 拍照与解析 (关联当前家庭) ---
     with t1:
-        st.subheader("一键提取旧保单")
-        img_file = st.file_uploader("拍摄或上传保单照片", type=['jpg', 'png', 'jpeg'])
+        st.subheader(f"📄 录入保单：归属于 【{st.session_state.current_family}】")
+        img_file = st.file_uploader("上传照片/截图进行增强", type=['jpg', 'png', 'jpeg'])
         if img_file:
-            with st.spinner("图像增强中..."):
-                st.image(sys.process_image(img_file.getvalue()), caption="增强效果图", use_container_width=True)
+            st.image(sys.process_image(img_file.getvalue()), caption="增强处理预览", use_container_width=True)
         
-        raw_text = st.text_area("粘贴 OCR 文本内容：", height=100)
-        if st.button("🚀 AI 结构化解析", use_container_width=True):
+        raw_text = st.text_area("请粘贴 OCR 识别文本：", height=120, placeholder="此处粘贴保单文字内容...")
+        if st.button("🚀 启动 AI 结构化解析", use_container_width=True, type="primary"):
             if raw_text and ds_key:
-                with st.spinner("精算引擎解析中..."):
+                with st.spinner("DeepSeek 正在解析..."):
                     res = sys.analyze_policy(raw_text)
-                    if res:
-                        st.session_state.temp_res = res
-                        st.success("解析成功！")
-            elif not ds_key: st.error("请配置 API Key")
+                    if res: st.session_state.temp_res = res
+            elif not ds_key: st.error("请先配置 API Key")
 
         if 'temp_res' in st.session_state:
+            st.info(f"💡 提取结果将保存至客户：**{st.session_state.current_family}**")
             edit_df = st.data_editor(pd.DataFrame([st.session_state.temp_res]), use_container_width=True)
-            if st.button("✅ 存入客户家庭库", use_container_width=True):
+            if st.button("✅ 确认入库并归档", use_container_width=True):
                 r = edit_df.iloc[0].to_dict()
-                sys.conn.execute("INSERT INTO family_atlas (holder, insured, relation, product, premium, coverage, category, raw_data) VALUES (?,?,?,?,?,?,?,?)",
-                                 (r['holder'], r['insured'], r['relation'], r['product'], r['premium'], r['coverage'], r.get('category','综合'), json.dumps(r)))
+                sys.conn.execute(
+                    "INSERT INTO family_atlas (family_name, holder, insured, relation, product, premium, coverage, category, raw_data) VALUES (?,?,?,?,?,?,?,?,?)",
+                    (st.session_state.current_family, r['holder'], r['insured'], r['relation'], r['product'], r['premium'], r['coverage'], r.get('category','综合'), json.dumps(r))
+                )
                 sys.conn.commit()
-                st.success("已归档！请前往【家族看板】查看或生成报告。")
+                st.success(f"归档成功！数据已存入【{st.session_state.current_family}】档案库。")
                 del st.session_state.temp_res
 
-    # ---------------- 模块2：家族看板 & 展业报告生成 ----------------
+    # --- 2. 客户档案看板 (支持数据筛选与全局概览) ---
     with t2:
-        df = pd.read_sql("SELECT * FROM family_atlas", sys.conn)
-        if not df.empty:
-            c1, c2 = st.columns(2)
-            c1.metric("家庭年缴保费", f"¥{df['premium'].sum():,.2f}")
-            c2.metric("覆盖成员数", f"{len(df['insured'].unique())} 人")
-            st.bar_chart(df, x="insured", y="premium", color="category")
+        # 1. 当前选中档案的数据
+        df_current = pd.read_sql(f"SELECT * FROM family_atlas WHERE family_name = '{st.session_state.current_family}'", sys.conn)
+        
+        # 2. 所有客户的全局简报
+        df_all = pd.read_sql("SELECT family_name, SUM(premium) as total_premium, COUNT(*) as policy_count FROM family_atlas GROUP BY family_name", sys.conn)
 
+        st.subheader(f"📊 【{st.session_state.current_family}】 专属全景看板")
+        if not df_current.empty:
+            col_m1, col_m2 = st.columns(2)
+            col_m1.metric("家庭年缴总保费", f"¥{df_current['premium'].sum():,.2f}")
+            col_m2.metric("已录入保单数", f"{len(df_current)} 份")
+            
+            st.bar_chart(df_current, x="insured", y="premium", color="category")
+            
+            # 报告生成区
             st.divider()
-            st.subheader("💼 B端专属：一键生成展业体检报告")
-            st.caption("利用大模型分析当前数据，自动生成用于促单的专业报告。")
-            
-            col_a, col_b = st.columns(2)
-            agent_name = col_a.text_input("您的姓名 (理财师)", placeholder="例如：李总监")
-            client_name = col_b.text_input("客户称呼", placeholder="例如：张先生")
-            
-            if st.button("✨ 生成专属 PDF/Markdown 报告", use_container_width=True, type="primary"):
-                if agent_name and client_name and ds_key:
-                    with st.spinner("AI 正在撰写专业理财报告..."):
-                        report_content = sys.generate_professional_report(df.to_json(orient="records", force_ascii=False), agent_name, client_name)
-                        st.session_state.generated_report = report_content
-                else:
-                    st.error("请填写理财师姓名、客户称呼，并确保配置了 API Key。")
-                    
-            # 显示报告并提供【打印为PDF】按钮
-            if 'generated_report' in st.session_state:
-                st.markdown("---")
-                st.markdown("<div style='background-color:#ffffff; padding:20px; border-radius:10px; border:1px solid #e0e0e0; color:#333;'>", unsafe_allow_html=True)
-                st.markdown(st.session_state.generated_report)
-                st.markdown("</div>", unsafe_allow_html=True)
-                
-                st.write("")
-                # 利用 JavaScript 调用浏览器的打印功能，完美导出 PDF
-                components.html(
-                    """
-                    <script>
-                    function printReport() {
-                        window.parent.print();
-                    }
-                    </script>
-                    <button onclick="printReport()" style="width: 100%; padding: 10px; background-color: #4CAF50; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer;">
-                        🖨️ 保存为 PDF (调用浏览器打印)
-                    </button>
-                    <p style="text-align:center; font-size:12px; color:gray; font-family:sans-serif;">提示：点击后在弹出的窗口中选择“另存为 PDF”即可发送给客户。</p>
-                    """, height=100
-                )
+            st.subheader("💼 专业展业报告生成")
+            agent_name = st.text_input("您的姓名/头衔", value="资深保险规划师")
+            if st.button("✨ 生成 PDF 诊断报告内容", use_container_width=True, type="primary"):
+                if ds_key:
+                    with st.spinner("正在分析保障漏洞并撰写报告..."):
+                        report = sys.generate_professional_report(df_current.to_json(orient="records", force_ascii=False), agent_name, st.session_state.current_family)
+                        st.session_state.final_report = report
+                else: st.error("请先配置 API Key")
+
+            if 'final_report' in st.session_state:
+                st.markdown(f"<div style='background-color:white; color:#333; padding:30px; border-radius:12px; border:1px solid #ddd; margin-top:20px;'>{st.session_state.final_report}</div>", unsafe_allow_html=True)
+                components.html("""<script>function p(){ window.parent.print(); }</script><button onclick="p()" style="width:100%; padding:12px; background:#4CAF50; color:white; border:none; border-radius:8px; cursor:pointer; font-size:16px; font-weight:bold; margin-top:15px;">🖨️ 打印/导出 PDF 报告</button>""", height=80)
         else:
-            st.info("暂无数据，请先在【拍照解析】中录入客户保单。")
+            st.info(f"档案【{st.session_state.current_family}】下暂无数据。")
 
-    # ---------------- 模块3：车险理赔预判 ----------------
+        # 3. 全局客户大盘列表
+        st.divider()
+        st.subheader("🌍 代理人全局视角：所有客户概览")
+        if not df_all.empty:
+            st.dataframe(df_all.rename(columns={'family_name':'客户档案名', 'total_premium':'总保费', 'policy_count':'保单数量'}), use_container_width=True, hide_index=True)
+        else:
+            st.caption("暂无任何客户档案记录。")
+
+    # --- 3. 车险理赔 (独立功能) ---
     with t3:
-        st.subheader("🚗 车险事故向导")
-        acc_text = st.text_area("描述事故经过...", height=150)
-        if st.button("⚖️ 生成建议", use_container_width=True):
-            if acc_text and ds_key:
-                st.markdown(sys.predict_auto_claim(acc_text))
+        st.subheader("🚗 车险事故理赔预判")
+        acc_text = st.text_area("请详细描述事故经过：", height=150, placeholder="如：我在直行时撞到了左转的车辆，我是全责吗？报保险划算吗？")
+        if st.button("⚖️ 启动 AI 风险评估", use_container_width=True):
+            if ds_key and acc_text:
+                with st.spinner("AI 专家推演中..."):
+                    st.markdown(sys.predict_auto_claim(acc_text))
 
-    # ---------------- 模块4：条款智能问答 ----------------
+    # --- 4. 条款问答 (独立功能) ---
     with t4:
-        st.subheader("💬 长文本条款顾问")
-        pdf_file = st.file_uploader("上传保险合同 (PDF)", type=['pdf'])
-        question = st.text_input("向条款提问")
-        if st.button("💡 查阅并解答", use_container_width=True):
+        st.subheader("💬 长文本条款智能律师")
+        pdf_file = st.file_uploader("上传保险合同全文 PDF", type=['pdf'])
+        question = st.text_input("针对条款提问：", placeholder="如：等待期内查出囊肿赔吗？既往症如何定义？")
+        if st.button("💡 立即穿透条款查询", use_container_width=True):
             if pdf_file and question and ds_key:
-                reader = PyPDF2.PdfReader(BytesIO(pdf_file.getvalue()))
-                full_text = "".join([page.extract_text() for page in reader.pages if page.extract_text()])
-                if full_text:
+                with st.spinner("正在查阅数万字条款原文..."):
+                    reader = PyPDF2.PdfReader(BytesIO(pdf_file.getvalue()))
+                    full_text = "".join([p.extract_text() for p in reader.pages if p.extract_text()])
                     st.write(sys.qa_policy_terms(full_text, question))
-                else:
-                    st.error("无法提取文本，可能是纯图片PDF。")
 
-    # ---------------- 模块5：系统设置 ----------------
+    # --- 5. 设置 ---
     with t5:
-        st.subheader("⚙️ 引擎配置")
-        new_key = st.text_input("DeepSeek API Key", type="password", value=st.session_state.api_key)
-        if st.button("💾 保存生效", use_container_width=True):
+        st.subheader("⚙️ 系统引擎设置")
+        new_key = st.text_input("DeepSeek API Key (API 密钥)", type="password", value=st.session_state.api_key)
+        if st.button("💾 保存并更新配置", use_container_width=True):
             st.session_state.api_key = new_key
-            st.success("配置已保存！")
+            st.success("配置已保存！各项 AI 引擎已激活。")
             st.rerun()
 
 if __name__ == "__main__":
