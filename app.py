@@ -45,7 +45,7 @@ class UltimateInsuranceSystem:
 
     def analyze_policy(self, raw_text):
         if not self.llm: return None
-        text = re.sub(r'\s+', ' ', text.strip()) if hasattr(raw_text, 'strip') else raw_text
+        text = re.sub(r'\s+', ' ', raw_text.strip()) if hasattr(raw_text, 'strip') else raw_text
         system_prompt = """你是一个专业的保险精算助手。请从文本提取关键信息并返回JSON。
         字段要求：holder(投保人), insured(被保人), relation(关系:本人/配偶/子女/父母), product(产品名), premium(保费数字), coverage(保额数字), category(险种:重疾/医疗/意外/寿险/车险)。
         仅返回 JSON 代码块。"""
