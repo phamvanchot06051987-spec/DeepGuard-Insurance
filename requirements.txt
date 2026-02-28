@@ -1,0 +1,14 @@
+# 核心框架
+streamlit>=1.31.0
+pandas>=2.0.0
+numpy>=1.24.0
+
+# 视觉处理（注意：云端或服务器必须用 headless 版本）
+opencv-python-headless>=4.8.0
+
+# AI 与 大语言模型
+langchain-openai>=0.0.3
+langchain-core>=0.1.10
+
+# PDF 处理
+PyPDF2>=3.0.0
